@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Finance Tracker | Spending Insights</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+        }
+        .category-animation {
+            transition: all 0.3s ease;
+        }
+        .category-animation:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .recommendation-card {
+            border-left: 4px solid;
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="gradient-bg text-white py-8 shadow-lg">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-6 md:mb-0">
+                    <h1 class="text-3xl font-bold mb-2">Personal Finance Tracker</h1>
+                    <p class="opacity-90">AI-powered spending insights and recommendations</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="bg-white bg-opacity-20 rounded-full p-2">
+                        <span id="totalSpending" class="text-2xl font-semibold">$0.00</span>
+                    </div>
+                    <div class="bg-white bg-opacity-20 rounded-full p-2">
+                        <span id="avgDaily" class="text-sm">$0/day</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Data Upload Area -->
+        <section class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Upload Your Transactions</h2>
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-grow">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Upload CSV file (Date, Amount, Description format)
+                    </label>
+                    <input type="file" id="csvUpload" accept=".csv" class="block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100">
+                </div>
+                <div class="flex items-center">
+                    <button id="parseBtn" class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-md hover:from-blue-600 hover:to-blue-700 transition-colors flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                        Analyze Data
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <div id="dashboard" class="hidden">
+
+            <!-- Overview -->
+            <section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white rounded-xl shadow p-4">
+                    <h3 class="text-sm text-gray-500 font-medium mb-1">Total Spending</h3>
+                    <p id="totalSpendingCard" class="text-2xl font-bold">$0.00</p>
+                    <p class="text-xs text-gray-400 mt-1">All transactions</p>
+                </div>
+                <div class="bg-white rounded-xl shadow p-4">
+                    <h3 class="text-sm text-gray-500 font-medium mb-1">Highest Category</h3>
+                    <p id="highestCategory" class="text-2xl font-bold">None</p>
+                    <p class="text-xs text-gray-400 mt-1">Most spent</p>
+                </div>
+                <div class="bg-white rounded-xl shadow p-4">
+                    <h3 class="text-sm text-gray-500 font-medium mb-1">Unusual Expenses</h3>
+                    <p id="unusualCount" class="text-2xl font-bold">0</p>
+                    <p class="text-xs text-gray-400 mt-1">Potential anomalies</p>
+                </div>
+                <div class="bg-white rounded-xl shadow p-4">
+                    <h3 class="text-sm text-gray-500 font-medium mb-1">Potential Savings</h3>
+                    <p id="potentialSavings" class="text-2xl font-bold">$0.00</p>
+                    <p class="text-xs text-gray-400 mt-1">Monthly opportunity</p>
+                </div>
+            </section>
+
+            <!-- Main body -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left Column: Charts -->
+                <div class="lg:col-span-2 space-y-8">
+                    <!-- Monthly Spending -->
+                    <section class="bg-white rounded-xl shadow-md p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Monthly Spending</h2>
+                            <select id="monthRange" class="text-sm border rounded-md px-3 py-1">
+                                <option value="3">Last 3 Months</option>
+                                <option value="6" selected>Last 6 Months</option>
+                                <option value="12">Last 12 Months</option>
+                            </select>
+                        </div>
+                        <canvas id="monthlyChart" height="300"></canvas>
+                    </section>
+
+                    <!-- Categories -->
+                    <section class="bg-white rounded-xl shadow-md p-6">
+                        <h2 class="text-xl font-semibold mb-4">Category Breakdown</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <canvas id="categoryChart" height="250"></canvas>
+                            </div>
+                            <div>
+                                <div id="categoryList" class="space-y-3">
+                                    <!-- Categories will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Right Column Analysis -->
+                <div class="space-y-8">
+                    <!-- Anomaly Detection -->
+                    <section class="bg-white rounded-xl shadow-md p-6">
+                        <h2 class="text-xl font-semibold mb-4 flex items-center">
+                            Unusual Spending
+                            <span id="anomalyIndicator" class="ml-2 h-3 w-3 bg-red-500 rounded-full pulse-animation hidden"></span>
+                        </h2>
+                        <div id="anomaliesList" class="space-y-4">
+                            <p class="text-gray-500">No anomalies detected yet. Upload your transactions to analyze.</p>
+                        </div>
+                    </section>
+
+                    <!-- Recommendation -->
+                    <section class="bg-white rounded-xl shadow-md p-6">
+                        <h2 class="text-xl font-semibold mb-4">Smart Recommendations</h2>
+                        <div id="recommendations" class="space-y-4">
+                            <div class="recommendation-card border-l-blue-500 pl-4 py-2">
+                                <h3 class="font-medium text-blue-700">Upload your transaction data</h3>
+                                <p class="text-sm text-gray-600">To get personalized recommendations, please upload your CSV file above.</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Export Area -->
+                    <section class="bg-white rounded-xl shadow-md p-6">
+                        <h2 class="text-xl font-semibold mb-4">Export Insights</h2>
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <button id="exportPdf" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                                </svg>
+                                Export PDF
+                            </button>
+                            <button id="exportCsv" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Export CSV
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-grayk-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-4 text-center text-sm text-gray-400">
+            <p>Personal Finance Tracker &copy; 2025 | AI-powered spending insights</p>
+        </div>
+    </footer>
+
+    <script>
+        let transactions = [];
+        let categorizedData = {};
+        let monthlyData = {};
+        let anomalies = [];
+        let charts = {};
+        let categoryColors = {
+            'Food': '#F59E0B',
+            'Housing': '#10B981',
+            'Transportation': '#3B82F6',
+            'Entertainment': '#8B5CF6',
+            'Shopping': '#EC4899',
+            'Healthcare': '#EF4444',
+            'Education': '#14B8A6',
+            'Other': '#64748B'
+        };
+
+        const csvUpload = document.getElementById('csvUpload');
+        const parseBtn = document.getElementById('parseBtn');
+        const dashboard = document.getElementById('dashboard');
+        const categoryList = document.getElementById('categoryList');
+        const anomaliesList = document.getElementById('anomaliesList');
+        const recommendations = document.getElementById('recommendations');
+        const monthRange = document.getElementById('monthRange');
+
+        function initializeCharts() {
+            const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+            charts.monthly = new Chart(monthlyCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Monthly Spending',
+                        data: [],
+                        backgroundColor: '#4F46E5',
+                        borderRadius: 4,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return '$' + context.raw.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            charts.category = new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 16,
+                                usePointStyle: true,
+                                pointStyle: 'rectRounded'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: $${value.toLocaleString()} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+        function parseCSV(file) {
+            return new Promise((resolve, reject) => {
+                Papa.parse(file, {
+                    header: true,
+                    complete: (results) => {
+                        resolve(results.data);
+                    },
+                    error: (error) => {
+                        reject(error);
+                    }
+                });
+            });
+        }
+        function categorizeTransactions(data) {
+            const categories = {
+                'Food': ['restaurant', 'food', 'groceries', 'coffee', 'lunch', 'dinner', 'breakfast', 'bar'],
+                'Housing': ['rent', 'mortgage', 'housing', 'apartment', 'home', 'property', 'electricity', 'water', 'gas', 'internet'],
+                'Transportation': ['uber', 'lyft', 'taxi', 'train', 'bus', 'subway', 'gas station', 'fuel', 'parking', 'toll'],
+                'Entertainment': ['movie', 'concert', 'netflix', 'spotify', 'game', 'hobby', 'music', 'streaming'],
+                'Shopping': ['store', 'shopping', 'amazon', 'ebay', 'sale', 'clothes', 'electronics', 'furniture'],
+                'Healthcare': ['pharmacy', 'medical', 'doctor', 'hospital', 'dentist', 'drug store', 'insurance'],
+                'Education': ['school', 'university', 'course', 'book', 'textbook', 'tuition', 'learning'],
+                'Other': []
+            };
+            return data.map(transaction => {
+                const description = transaction.Description ? transaction.Description.toLowerCase() : '';
+                let category = 'Other';
+                for (const [cat, keywords] of Object.entries(categories)) {
+                    if (keywords.some(keyword => description.includes(keyword))) {
+                        category = cat;
+                        break;
+                    }
+                }
+                let amount = transaction.Amount;
+                if (typeof amount === 'string') {
+                    amount = parseFloat(amount.replace(/[^0-9.-]/g, ''));
+                    if (isNaN(amount)) amount = 0;
+                }
+                let date = transaction.Date;
+                if (typeof date === 'string') {
+                    const dateParsed = new Date(date);
+                    if (!isNaN(dateParsed.getTime())) {
+                        date = dateParsed;
+                    } else {
+                        const parts = date.split(/[-/]/);
+                        if (parts.length === 3) {
+                            date = new Date(parts[2], parts[0]-1, parts[1]);
+                        }
+                    }
+                }
+                return {
+                    ...transaction,
+                    Amount: Math.abs(amount),
+                    Category: category,
+                    Date: date instanceof Date ? date : new Date()
+                };
+            });
+        }
+        function analyzeAnomalies(data) {
+            const categoryStats = {};
+            Object.entries(categorizedData).forEach(([category, items]) => {
+                const amounts = items.map(item => item.Amount);
+                const sum = amounts.reduce((a, b) => a + b, 0);
+                const avg = sum / (amounts.length || 1);
+                const squaredDiffs = amounts.map(x => Math.pow(x - avg, 2));
+                const stdDev = Math.sqrt(squaredDiffs.reduce((a, b) => a + b, 0) / (amounts.length || 1));
+                categoryStats[category] = { avg, stdDev };
+            });
+            const anomalies = data.filter(transaction => {
+                const stats = categoryStats[transaction.Category];
+                if (!stats) return false;
+                return transaction.Amount > (stats.avg + 2 * stats.stdDev);
+            });
+            return anomalies;
+        }
+        function generateRecommendations(data, anomalies) {
+            const recs = [];
+            const categoriesSorted = Object.entries(categorizedData)
+                .sort((a, b) => {
+                    const totalA = a[1].reduce((sum, t) => sum + t.Amount, 0);
+                    const totalB = b[1].reduce((sum, t) => sum + t.Amount, 0);
+                    return totalB - totalA;
+                });
+            if (categoriesSorted.length > 0) {
+                const [topCategory, topTransactions] = categoriesSorted[0];
+                const topTotal = topTransactions.reduce((sum, t) => sum + t.Amount, 0);
+                const avg = topTotal / topTransactions.length;
+                const monthlyTotal = topTotal / (data.length ? (new Date() - new Date(Math.min(...data.map(t => t.Date)))) / (1000 * 60 * 60 * 24 * 30) : 1);
+                recs.push({
+                    title: `High spending on ${topCategory}`,
+                    content: `You spend an average of $${avg.toFixed(2)} per transaction on ${topCategory}, totaling $${monthlyTotal.toFixed(2)} monthly. Consider reviewing these expenses for potential savings.`,
+                    severity: 'high',
+                    savings: monthlyTotal * 0.2
+                });
+            }
+            if (anomalies.length > 0) {
+                const anomalyTotal = anomalies.reduce((sum, t) => sum + t.Amount, 0);
+                const anomalyAvg = anomalyTotal / anomalies.length;
+                recs.push({
+                    title: `${anomalies.length} unusual transactions detected`,
+                    content: `We found ${anomalies.length} transactions that are significantly higher than your typical spending patterns, averaging $${anomalyAvg.toFixed(2)} each. Review these for potential errors or areas to cut back.`,
+                    severity: 'high',
+                    savings: anomalyTotal * 0.5
+                });
+            }
+            const smallExpenses = data.filter(t => t.Amount < 20);
+            if (smallExpenses.length > 20) {
+                const smallTotal = smallExpenses.reduce((sum, t) => sum + t.Amount, 0);
+                recs.push({
+                    title: 'Many small expenses',
+                    content: `You have ${smallExpenses.length} small expenses (< $20) totaling $${smallTotal.toFixed(2)}. These can add up quickly - consider bundling or reducing small, frequent purchases.`,
+                    severity: 'medium',
+                    savings: smallTotal * 0.3
+                });
+            }
+            const potentialSubscriptions = data.filter(t => 
+                t.Description.toLowerCase().includes('subscription') || 
+                t.Description.toLowerCase().includes('monthly') || 
+                t.Description.toLowerCase().includes('annual') ||
+                (t.Amount > 4.99 && t.Amount < 19.99 && new Set(data.filter(d => 
+                    d.Description.toLowerCase().includes(t.Description.split(' ')[0].toLowerCase())
+                ).map(d => d.Date.getMonth())).size > 3)
+            );
+            if (potentialSubscriptions.length > 0) {
+                recs.push({
+                    title: 'Potential subscriptions found',
+                    content: `We found ${potentialSubscriptions.length} transactions that look like recurring subscriptions. Review these to ensure you're still using all these services.`,
+                    severity: 'low',
+                    savings: potentialSubscriptions.reduce((sum, t) => sum + (t.Amount * 12), 0) * 0.25 // Assuming 25% could be canceled
+                });
+            }
+            return recs;
+        }
+        function updateCharts() {
+            const monthRangeValue = parseInt(monthRange.value);
+            const monthlyLabels = Object.keys(monthlyData)
+                .sort()
+                .slice(-monthRangeValue);
+            const monthlyValues = monthlyLabels.map(month => monthlyData[month]);
+            charts.monthly.data.labels = monthlyLabels;
+            charts.monthly.data.datasets[0].data = monthlyValues;
+            charts.monthly.update();
+            const categoryLabels = Object.keys(categorizedData);
+            const categoryValues = categoryLabels.map(cat => 
+                categorizedData[cat].reduce((sum, t) => sum + t.Amount, 0)
+            );
+            const categoryColorsArray = categoryLabels.map(cat => categoryColors[cat] || '#64748B');
+            
+            charts.category.data.labels = categoryLabels;
+            charts.category.data.datasets[0].data = categoryValues;
+            charts.category.data.datasets[0].backgroundColor = categoryColorsArray;
+            charts.category.update();
+            categoryList.innerHTML = categoryLabels.map(cat => {
+                const total = categorizedData[cat].reduce((sum, t) => sum + t.Amount, 0);
+                const count = categorizedData[cat].length;
+                const percentage = total / (Object.values(categorizedData).reduce((sum, cat) => 
+                    sum + cat.reduce((sum, t) => sum + t.Amount, 0), 0)) * 100;
+                return `
+                    <div class="flex justify-between items-center category-animation">
+                        <div class="flex items-center">
+                            <div class="w-3 h-3 rounded-full mr-2" style="background-color: ${categoryColors[cat] || '#64748B'}"></div>
+                            <span class="font-medium">${cat}</span>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-medium">$${total.toLocaleString()}</div>
+                            <div class="text-xs text-gray-500">${count} transactions (${percentage.toFixed(1)}%)</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            if (anomalies.length > 0) {
+                anomaliesList.innerHTML = anomalies.map(anomaly => `
+                    <div class="bg-red-50 rounded-lg p-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-medium text-red-700">$${anomaly.Amount.toFixed(2)}</span>
+                            <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">${anomaly.Category}</span>
+                        </div>
+                        <p class="text-sm">${anomaly.Description}</p>
+                        <p class="text-xs text-gray-500 mt-1">${anomaly.Date.toLocaleDateString()}</p>
+                    </div>
+                `).join('');
+            } else {
+                anomaliesList.innerHTML = '<p class="text-gray-500">No unusual transactions detected.</p>';
+            }
+            const recs = generateRecommendations(transactions, anomalies);
+            if (recs.length > 0) {
+                recommendations.innerHTML = recs.map(rec => `
+                    <div class="recommendation-card border-l-${rec.severity === 'high' ? 'red' : rec.severity === 'medium' ? 'yellow' : 'blue'}-500 pl-4 py-2">
+                        <h3 class="font-medium text-${rec.severity === 'high' ? 'red' : rec.severity === 'medium' ? 'yellow' : 'blue'}-700">${rec.title}</h3>
+                        <p class="text-sm text-gray-600">${rec.content}</p>
+                    </div>
+                `).join('');
+            }
+            const totalSpending = Object.values(categorizedData).reduce((sum, category) => 
+                sum + category.reduce((sum, t) => sum + t.Amount, 0), 0);
+            const highestCategory = categoryLabels.reduce((maxCat, cat) => {
+                const catTotal = categorizedData[cat].reduce((sum, t) => sum + t.Amount, 0);
+                return catTotal > (categorizedData[maxCat]?.reduce((sum, t) => sum + t.Amount, 0) || 0) ? cat : maxCat;
+            }, categoryLabels[0]);
+            const potentialSavings = recs.reduce((sum, rec) => sum + (rec.savings || 0), 0);
+            document.getElementById('totalSpending').textContent = `$${totalSpending.toLocaleString()}`;
+            document.getElementById('totalSpendingCard').textContent = `$${totalSpending.toLocaleString()}`;
+            document.getElementById('highestCategory').textContent = highestCategory || 'None';
+            document.getElementById('unusualCount').textContent = anomalies.length;
+            document.getElementById('potentialSavings').textContent = `$${potentialSavings.toFixed(2)}`;
+            if (transactions.length > 0) {
+                const dates = transactions.map(t => new Date(t.Date));
+                const minDate = new Date(Math.min(...dates));
+                const maxDate = new Date(Math.max(...dates));
+                const days = (maxDate - minDate) / (1000 * 60 * 60 * 24) || 1;
+                const avgDaily = totalSpending / days;
+                document.getElementById('avgDaily').textContent = `$${avgDaily.toFixed(2)}/day`;
+            }
+            const anomalyIndicator = document.getElementById('anomalyIndicator');
+            if (anomalies.length > 0) {
+                anomalyIndicator.classList.remove('hidden');
+            } else {
+                anomalyIndicator.classList.add('hidden');
+            }
+        }
+        function groupByCategory(data) {
+            const grouped = {};
+            data.forEach(transaction => {
+                if (!grouped[transaction.Category]) {
+                    grouped[transaction.Category] = [];
+                }
+                grouped[transaction.Category].push(transaction);
+            });
+            return grouped;
+        }
+        function groupByMonth(data) {
+            const grouped = {};
+            data.forEach(transaction => {
+                const monthYear = transaction.Date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short' 
+                });    
+                if (!grouped[monthYear]) {
+                    grouped[monthYear] = 0;
+                }
+                grouped[monthYear] += transaction.Amount;
+            });
+            return grouped;
+        }
+        parseBtn.addEventListener('click', async () => {
+            if (csvUpload.files.length === 0) {
+                alert('Please select a CSV file first');
+                return;
+            }
+            try {
+                const file = csvUpload.files[0];
+                const rawData = await parseCSV(file);
+                transactions = categorizeTransactions(rawData);
+                categorizedData = groupByCategory(transactions);
+                monthlyData = groupByMonth(transactions);
+                anomalies = analyzeAnomalies(transactions);
+                dashboard.classList.remove('hidden');
+                updateCharts();
+                dashboard.scrollIntoView({ behavior: 'smooth' });
+            } catch (error) {
+                console.error('Error parsing CSV:', error);
+                alert('Error processing your file. Please ensure it has Date, Amount, and Description columns.');
+            }
+        });
+        monthRange.addEventListener('change', () => {
+            if (transactions.length > 0) {
+                updateCharts();
+            }
+        });
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeCharts();
+        });
+        document.getElementById('exportPdf').addEventListener('click', () => {
+            alert('PDF export would be implemented in production (using libraries like jsPDF or browser print)');
+        });
+        document.getElementById('exportCsv').addEventListener('click', () => {
+            alert('CSV export would be implemented in production');
+        });
+    </script>
+</body>
+</html>
+
